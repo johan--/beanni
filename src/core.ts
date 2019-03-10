@@ -1,4 +1,4 @@
-import { BankDataProviderInterface, FassInstitutionRelationship, AccountBalance } from './types';
+import { BankDataProviderInterface, FassInstitutionRelationship, AccountBalance, BankDataDocumentProviderInterface } from './types';
 import fs = require('fs');
 import yaml = require('js-yaml');
 import { SecretStore } from './secretStore';
@@ -67,26 +67,40 @@ export class Core
             await this.dataStore.open();
 
             for (const relationship of config.relationships) {
-                console.log('Fetching \'%s\' via \'%s\'', relationship.name, relationship.provider);
+                console.log('[%s] Fetching \'%s\'', relationship.provider, relationship.name);
                 const providerName = relationship.provider;
                 var module = require('./providers/' + providerName);
                 var provider = <BankDataProviderInterface>new module[providerName](executionContext);
 
                 try
                 {
+                    console.log('[%s] Logging in', relationship.provider);
                     await provider.login(async (key : string) => {
                         return await this.secretStore.retrieveSecret(relationship.name + ':' + key);
                     });
 
+                    console.log('[%s] Getting balances', relationship.provider);
                     var relationshipBalances = await provider.getBalances();
-                    console.log('Found %s accounts', relationshipBalances.length);
+                    console.log('[%s] Found %s balances', relationship.provider, relationshipBalances.length);
                     relationshipBalances.forEach(b => {
                         balances.push(b);
                         this.dataStore.addBalance(b);
                     });
+
+                    if (this.isDocumentProvider(provider))
+                    {
+                        var documentProvider = provider as BankDataDocumentProviderInterface;
+                        console.log('[%s] Getting documents', relationship.provider);
+                        await documentProvider.getDocuments();
+                    }
+                    else
+                    {
+                        console.log('[%s] Doesn\'t support documents; skipping', relationship.provider);
+                    }
                 }
                 catch (ex)
                 {
+                    debugger;
                     console.error(ex);
                 }
                 finally
@@ -101,6 +115,10 @@ export class Core
         {
             await this.dataStore.close();
         }
+    }
+
+    isDocumentProvider (provider: BankDataProviderInterface | BankDataDocumentProviderInterface): provider is BankDataDocumentProviderInterface {
+        return (<BankDataDocumentProviderInterface>provider).getDocuments !== undefined;
     }
 
     async init(executionContext:FassExecutionContext) {

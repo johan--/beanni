@@ -21,3 +21,7 @@ export interface BankDataProviderInterface {
 
     getBalances() : Promise<Array<AccountBalance>>;
 }
+
+export interface BankDataDocumentProviderInterface {
+    getDocuments() : Promise<void>;
+}

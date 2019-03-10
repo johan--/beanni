@@ -1,10 +1,10 @@
-import { BankDataProviderInterface, FassInstitutionRelationship, AccountBalance } from '../types';
+import { BankDataProviderInterface, AccountBalance, BankDataDocumentProviderInterface } from '../types';
 import puppeteer = require('puppeteer');
 import { FassExecutionContext } from '../core';
 
 const providerName = 'ING';
 
-export class Ing implements BankDataProviderInterface {
+export class Ing implements BankDataProviderInterface, BankDataDocumentProviderInterface {
     executionContext: FassExecutionContext;
 
     browser: puppeteer.Browser | undefined;
@@ -119,6 +119,77 @@ export class Ing implements BankDataProviderInterface {
         this.debugLog('getBalances', 2);
 
         return balances;
+    }
+
+    async getDocuments(): Promise<void>
+    {
+        if (this.page == null) throw 'Not logged in yet';
+        var page = this.page;
+
+        this.debugLog('getDocuments', 0);
+
+        // Navigate to the e-Statements page
+        await page.waitForSelector('ing-menu');
+        await page.click('ing-menu [data-target="#navigation-finance"]');
+        await page.click('ing-menu [data-target="#navigation-estatements"]');
+        this.debugLog('getDocuments', 1);
+
+        // Wait for the modules to load
+        await page.waitForSelector('ing-estatements');
+        await page.waitForSelector('ing-estatements-filters');
+        await page.waitForSelector('ing-estatements-filters ing-accounts-dropdown-simple');
+        this.debugLog('getDocuments', 2);
+
+        // Find available accounts
+        var availableAccounts = await page.$eval(
+            'ing-estatements-filters',
+            (el:any) => el.accounts
+        );
+        for (const account of availableAccounts) {
+            await this.getDocumentsForAccount(page, account);
+            this.debugLog('getDocuments', 3);
+        }
+        this.debugLog('getDocuments', 4);
+    }
+
+    private async getDocumentsForAccount(page: puppeteer.Page, account: { AccountNumber: string; })
+    {
+        // Filter to this account, and longest period available
+        await page.$eval(
+            'ing-estatements-filters',
+            (el: any, accountNumber: string) => {
+                el.selectAccountByNumber(accountNumber);
+                el.selectedPeriodIndex = (el.periods.length - 1);
+            },
+            account.AccountNumber
+        );
+        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 0);
+
+        // Find all of the statements
+        await page.click('ing-estatements #findButton');
+        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 1);
+
+        // Wait for the AJAX load to complete
+        await page.waitForFunction(
+            (accountNumber) => {
+                // @ts-ignore
+                var componentData = document.querySelector('ing-estatements-results').__data__;
+                return componentData.accountNumber === accountNumber;
+            },
+            {},
+            account.AccountNumber
+        );
+        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 2);
+
+        var availableStatements = await page.$eval(
+            'ing-estatements-results',
+            (el:any) => el.data.Items
+        );
+        for (const statement of availableStatements) {
+            var filename = statement.EndDate + ' ING ' + account.AccountNumber + ' Statement ' + statement.Id + '.pdf';
+            console.log('Found: %s', filename);
+        }
+        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 3);
     }
 
     private debugLog(stage: string, position: number) {
