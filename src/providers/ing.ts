@@ -64,6 +64,9 @@ export class Ing implements BankDataProviderInterface, BankDataDocumentProviderI
                 button.click();
         });
         this.debugLog('login', 6);
+
+        var cdpSession = await this.page.target().createCDPSession();
+        cdpSession.send('Page.setDownloadBehavior', {behavior: 'allow', downloadPath: '.' });
     }
 
     async logout() {
@@ -188,8 +191,17 @@ export class Ing implements BankDataProviderInterface, BankDataDocumentProviderI
         for (const statement of availableStatements) {
             var filename = statement.EndDate + ' ING ' + account.AccountNumber + ' Statement ' + statement.Id + '.pdf';
             console.log('Found: %s', filename);
+
+            // await page.$eval(
+            //     'input[type=hidden][name=Id][value="' + statement.Id + '"]',
+            //     (el:any) => el.form.submit()
+            // );
+            // this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 3);
+
+            // await page.waitForNavigation({ waitUntil: 'networkidle0' });
+            // this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 4);
         }
-        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 3);
+        this.debugLog('getDocumentsForAccount:' + account.AccountNumber, 5);
     }
 
     private debugLog(stage: string, position: number) {
