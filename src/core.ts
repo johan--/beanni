@@ -105,6 +105,7 @@ export class Core
                 }
                 finally
                 {
+                    console.log('[%s] Logging out', relationship.provider);
                     await provider.logout();
                 }
             }
